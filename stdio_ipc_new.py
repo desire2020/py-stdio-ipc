@@ -1,8 +1,9 @@
+#!/usr/bin/env python3
+
 from io import StringIO
 from queue import Queue
 from threading import Thread
 from subprocess import Popen, PIPE
-from shutil import copyfileobj
 import os
 import resource
 
@@ -11,13 +12,14 @@ def setrlimit():
     resource.setrlimit(resource.RLIMIT_AS, (m, -1))
 
 class ChildProcess():
-    def __init__(self, args):
+    def __init__(self, args, stdin_save_path='/dev/null', stdout_save_path='/dev/null', stderr_save_path='/dev/null'):
         self.qmain = Queue()
         self.qthread = Queue()
         self.thread = Thread(target=self._message_thread)
-        self.stdin = StringIO()
-        self.stdout = StringIO()
-        self.child = Popen(args, bufsize=0, stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines=True, preexec_fn=setrlimit)
+        self.stdin = open(stdin_save_path, 'w')
+        self.stdout = open(stdout_save_path, 'w')
+        self.stderr = open(stderr_save_path, 'w')
+        self.child = Popen(args, bufsize=0, stdin=PIPE, stdout=PIPE, stderr=self.stderr, universal_newlines=True, preexec_fn=setrlimit)
 
         self.thread.start()
 
@@ -69,11 +71,7 @@ class ChildProcess():
         self.qmain.put({ 'command': 'exit' })
         self.child.kill()
         self.thread.join()
+        self.stdin.close()
+        self.stdout.close()
+        self.stderr.close()
 
-    def save_stdio(self, path_stdin, path_stdout, path_stderr):
-        with open(path_stdin, 'w')  as fin,\
-             open(path_stdout, 'w') as fout,\
-             open(path_stderr, 'w') as ferr:
-            fin.write(self.stdin.getvalue())
-            fout.write(self.stdout.getvalue())
-            copyfileobj(self.child.stderr, ferr)
